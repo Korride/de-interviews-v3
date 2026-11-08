@@ -4,14 +4,14 @@
 
 SET search_path TO "TEST_V3";
 
-\echo '=== prediction table breakdown ==='
+-- === prediction table breakdown ===
 SELECT
     count(*)                                            AS total,
     count(*) FILTER (WHERE actual_price_rub IS NOT NULL) AS test_rows,
     count(*) FILTER (WHERE actual_price_rub IS NULL)      AS future_rows
 FROM ml_price_predictions;
 
-\echo '=== future rows must have NULL actual/error/ape ==='
+-- === future rows must have NULL actual/error/ape ===
 SELECT
     count(*) AS future_with_null_err
 FROM ml_price_predictions
@@ -25,7 +25,7 @@ FROM ml_price_predictions
 WHERE actual_price_rub IS NULL
   AND (abs_error_rub IS NOT NULL OR ape_pct IS NOT NULL);
 
-\echo '=== fact vs forecast sample (test period) ==='
+-- === fact vs forecast sample (test period) ===
 SELECT
     price_id,
     loading_date,
@@ -40,14 +40,14 @@ WHERE actual_price_rub IS NOT NULL
 ORDER BY price_id
 LIMIT 8;
 
-\echo '=== aggregate error (cross-check with model metrics) ==='
+-- === aggregate error (cross-check with model metrics) ===
 SELECT
     round(avg(ape_pct)::numeric, 2)        AS mean_ape_pct,
     round(avg(abs_error_rub)::numeric, 2)  AS mean_abs_error
 FROM ml_price_predictions
 WHERE actual_price_rub IS NOT NULL;
 
-\echo '=== idempotency: distinct price_ids ==='
+-- === idempotency: distinct price_ids ===
 SELECT
     count(*)                AS total_rows,
     count(DISTINCT price_id) AS distinct_ids

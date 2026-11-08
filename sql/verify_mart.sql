@@ -4,7 +4,7 @@
 
 SET search_path TO "TEST_V3";
 
-\echo '=== reliability_level distribution ==='
+-- === reliability_level distribution ===
 SELECT
     reliability_level,
     count(*) AS n
@@ -12,7 +12,7 @@ FROM mart_route_card
 GROUP BY reliability_level
 ORDER BY reliability_level;
 
-\echo '=== top-10 cells by trips ==='
+-- === top-10 cells by trips ===
 SELECT
     month,
     loading_city_name,
@@ -28,14 +28,14 @@ FROM mart_route_card
 ORDER BY trips_count DESC
 LIMIT 10;
 
-\echo '=== grain uniqueness check (should be equal) ==='
+-- === grain uniqueness check (should be equal) ===
 SELECT
     count(*)                                                                  AS total,
     count(DISTINCT (month, loading_city_gcid, unloading_city_gcid,
                     body_group, weight_category))                             AS distinct_grain
 FROM mart_route_card;
 
-\echo '=== cross-check one cell: Москва->Казань, Тент, FTL, Oct 2026 ==='
+-- === cross-check one cell: Москва->Казань, Тент, FTL, Oct 2026 ===
 WITH manual AS (
     SELECT
         date_trunc('month', pd.price_date)::date                          AS month,

@@ -4,13 +4,13 @@
 
 SET search_path TO "TEST_V3";
 
-\echo '=== month bounds (no future months) ==='
+-- === month bounds (no future months) ===
 SELECT
     min(month) AS min_month,
     max(month) AS max_month
 FROM mart_route_card;
 
-\echo '=== sample with non-null mom/yoy/cv ==='
+-- === sample with non-null mom/yoy/cv ===
 SELECT
     month,
     loading_city_name,
@@ -28,7 +28,7 @@ WHERE mom_pct IS NOT NULL OR yoy_pct IS NOT NULL
 ORDER BY trips_count DESC
 LIMIT 8;
 
-\echo '=== sanity: no negative/zero price leaked into mart ==='
+-- === sanity: no negative/zero price leaked into mart ===
 SELECT
     count(*) AS bad_median
 FROM mart_route_card

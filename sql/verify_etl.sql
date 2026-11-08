@@ -4,14 +4,14 @@
 
 SET search_path TO "TEST_V3";
 
-\echo '=== core_fact_prices ==='
+-- === core_fact_prices ===
 SELECT
     count(*)                                   AS total,
     count(*) FILTER (WHERE price_rub IS NULL)  AS null_price_rub,
     round(sum(price_rub)::numeric, 2)          AS sum_price_rub
 FROM core_fact_prices;
 
-\echo '=== dq_quarantine_prices (by reason) ==='
+-- === dq_quarantine_prices (by reason) ===
 SELECT
     reason_code,
     count(*) AS n
@@ -19,7 +19,7 @@ FROM dq_quarantine_prices
 GROUP BY reason_code
 ORDER BY reason_code;
 
-\echo '=== etl_batch_log ==='
+-- === etl_batch_log ===
 SELECT
     id,
     batch_start,
@@ -32,7 +32,7 @@ SELECT
 FROM etl_batch_log
 ORDER BY id;
 
-\echo '=== currencies in core (sanity) ==='
+-- === currencies in core (sanity) ===
 SELECT
     currency_code,
     count(*)                                 AS n,
