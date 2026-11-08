@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: deals_bigdata
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-root}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d deals_bigdata"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  pipeline:
+    build: .
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: deals_bigdata
+      DB_USER: postgres
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-root}
+      DB_SCHEMA: TEST_V3
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["bash", "/app/docker/run_all.sh"]
+
+volumes:
+  pgdata:

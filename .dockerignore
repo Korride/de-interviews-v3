@@ -1,0 +1,12 @@
+.git
+.gitignore
+.env
+.pytest_cache/
+__pycache__/
+*.pyc
+*.egg-info/
+catboost_info/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

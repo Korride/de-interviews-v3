@@ -1,0 +1,10 @@
+# Lightweight image for the ETL pipeline only (Question 1).
+# The full image (with CatBoost for ML) is in the root Dockerfile.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements-etl.txt .
+RUN pip install --no-cache-dir -r requirements-etl.txt
+
+COPY . .
