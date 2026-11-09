@@ -1,19 +1,19 @@
 -- =============================================================================
 --  Question 2: body-type unification.
---  Maps many-to-many price_body_types -> business groups (by std_id),
---  with fallback to prices.body_type and finally to 'Не указан'.
+--  Maps many-to-many raw.price_body_types -> business groups (by std_id),
+--  with fallback to raw.prices.body_type and finally to 'Не указан'.
 --  Idempotent: TRUNCATE + INSERT inside one transaction.
 -- =============================================================================
 
-SET search_path TO "TEST_V3";
+SET search_path TO core;
 
 BEGIN;
 
-TRUNCATE core_price_body_group;
+TRUNCATE price_body_group;
 
-INSERT INTO core_price_body_group (price_id, body_group, body_type_std_id)
+INSERT INTO price_body_group (price_id, body_group, body_type_std_id)
 
--- 1) primary path: price_body_types -> body_types -> std_id -> business group
+-- 1) primary path: raw.price_body_types -> raw.body_types -> std_id -> group
 SELECT
     pbt.price_id,
     CASE bt.std_id
@@ -24,8 +24,8 @@ SELECT
         ELSE 'Прочие'
     END             AS body_group,
     bt.std_id       AS body_type_std_id
-FROM price_body_types pbt
-JOIN body_types bt
+FROM raw.price_body_types pbt
+JOIN raw.body_types bt
     ON bt.id = pbt.body_type_id
 
 UNION   -- UNION dedups identical (price_id, body_group, std_id): prevents
@@ -42,11 +42,11 @@ SELECT
         ELSE 'Прочие'
     END         AS body_group,
     p.body_type AS body_type_std_id
-FROM prices p
+FROM raw.prices p
 WHERE p.body_type IS NOT NULL
   AND NOT EXISTS (
         SELECT 1
-        FROM price_body_types pb
+        FROM raw.price_body_types pb
         WHERE pb.price_id = p.id
   )
 
@@ -57,11 +57,11 @@ SELECT
     p.id,
     'Не указан'     AS body_group,
     NULL::integer   AS body_type_std_id
-FROM prices p
+FROM raw.prices p
 WHERE p.body_type IS NULL
   AND NOT EXISTS (
         SELECT 1
-        FROM price_body_types pb
+        FROM raw.price_body_types pb
         WHERE pb.price_id = p.id
   );
 
@@ -74,6 +74,6 @@ SELECT
     body_group,
     count(*)                    AS prices,
     count(DISTINCT price_id)    AS distinct_prices
-FROM core_price_body_group
+FROM price_body_group
 GROUP BY body_group
 ORDER BY body_group;

@@ -2,9 +2,14 @@
 --  Populate the deduplicated city dimension: keep min(cities.id) per gc_id.
 -- =============================================================================
 
-SET search_path TO "TEST_V3";
+SET search_path TO core;
 
-INSERT INTO core_dim_city (
+-- Idempotent rebuild: the dimension is fully derived from raw.cities.
+BEGIN;
+
+TRUNCATE dim_city;
+
+INSERT INTO dim_city (
     city_id,
     gc_id,
     name,
@@ -23,8 +28,10 @@ SELECT DISTINCT ON (gc_id)
     full_name_local,
     latitude,
     longitude
-FROM cities
+FROM raw.cities
 ORDER BY gc_id, id;
+
+COMMIT;
 
 -- -----------------------------------------------------------------------------
 -- Smoke check: expect 40 unique gc_id out of 42 source rows.
@@ -32,4 +39,4 @@ ORDER BY gc_id, id;
 SELECT
     count(*)                    AS cities_total,
     count(DISTINCT gc_id)       AS distinct_gc_id
-FROM core_dim_city;
+FROM dim_city;

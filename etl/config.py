@@ -8,13 +8,23 @@ from dotenv import load_dotenv
 load_dotenv(override=False)
 
 
+def _quoted(name: str) -> str:
+    """Schema name as a safe SQL identifier (handles any case)."""
+    return '"' + name.replace('"', '""') + '"'
+
+
 class Config:
     DB_HOST = os.getenv("DB_HOST", "localhost")
     DB_PORT = os.getenv("DB_PORT", "5434")
     DB_NAME = os.getenv("DB_NAME", "postgres")
     DB_USER = os.getenv("DB_USER", "postgres")
     DB_PASSWORD = os.getenv("DB_PASSWORD", "root")
-    DB_SCHEMA = os.getenv("DB_SCHEMA", "TEST_V3")
+
+    # raw -> core -> mart layers
+    RAW_SCHEMA = os.getenv("DB_RAW_SCHEMA", "raw")
+    CORE_SCHEMA = os.getenv("DB_CORE_SCHEMA", "core")
+    MART_SCHEMA = os.getenv("DB_MART_SCHEMA", "mart")
+
     AS_OF_DATE = os.getenv("AS_OF_DATE", "2026-10-26")
 
     @property
@@ -25,9 +35,16 @@ class Config:
         )
 
     @property
-    def schema_quoted(self) -> str:
-        """Schema name as a quoted identifier (handles mixed-case like TEST_V3)."""
-        return '"' + self.DB_SCHEMA.replace('"', '""') + '"'
+    def raw(self) -> str:
+        return _quoted(self.RAW_SCHEMA)
+
+    @property
+    def core(self) -> str:
+        return _quoted(self.CORE_SCHEMA)
+
+    @property
+    def mart(self) -> str:
+        return _quoted(self.MART_SCHEMA)
 
 
 config = Config()

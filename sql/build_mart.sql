@@ -1,7 +1,7 @@
 -- =============================================================================
---  Question 2: analytical mart «route card / market corridor» (mart_route_card).
+--  Question 2: analytical mart «route card / market corridor» (mart.route_card).
 --  grain: month x loading city x unloading city x body_group x weight_category.
---  Month is formed from price_dates.price_date (long deals span several months).
+--  Month is formed from raw.price_dates.price_date (long deals span months).
 --  Idempotent: TRUNCATE + INSERT inside one transaction.
 --
 --  Freshness rule (documented): a month cell is «fresh» when
@@ -9,13 +9,13 @@
 --  i.e. only the current month (October 2026) qualifies as fresh.
 -- =============================================================================
 
-SET search_path TO "TEST_V3";
+SET search_path TO mart;
 
 BEGIN;
 
-TRUNCATE mart_route_card;
+TRUNCATE route_card;
 
-INSERT INTO mart_route_card (
+INSERT INTO route_card (
     month,
     loading_city_gcid,
     unloading_city_gcid,
@@ -51,14 +51,14 @@ WITH base AS (
         f.price_rub / NULLIF(f.distance, 0)        AS price_km,
         f.organization_id,
         f.price_type
-    FROM core_fact_prices f
-    JOIN core_price_body_group g
+    FROM core.fact_prices f
+    JOIN core.price_body_group g
         ON g.price_id = f.price_id
-    JOIN core_dim_city lc
+    JOIN core.dim_city lc
         ON lc.gc_id = f.loading_city_gcid
-    JOIN core_dim_city uc
+    JOIN core.dim_city uc
         ON uc.gc_id = f.unloading_city_gcid
-    JOIN price_dates pd
+    JOIN raw.price_dates pd
         ON pd.price_id = f.price_id
     WHERE f.is_fact = true
       AND f.complex = false
@@ -161,8 +161,8 @@ COMMIT;
 -- Smoke check.
 -- -----------------------------------------------------------------------------
 SELECT
-    count(*)                        AS mart_rows,
-    count(DISTINCT month)           AS months,
+    count(*)                            AS mart_rows,
+    count(DISTINCT month)               AS months,
     count(DISTINCT loading_city_gcid)   AS cities,
-    count(DISTINCT body_group)      AS body_groups
-FROM mart_route_card;
+    count(DISTINCT body_group)          AS body_groups
+FROM route_card;

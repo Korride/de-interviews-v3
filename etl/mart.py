@@ -17,7 +17,8 @@ from etl.config import config
 logger = logging.getLogger("etl.mart")
 
 SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
-S = config.schema_quoted
+CORE = config.core
+MART = config.mart
 
 _TXN_KEYWORDS = {"BEGIN;", "COMMIT;", "ROLLBACK;", "BEGIN", "COMMIT"}
 
@@ -37,12 +38,12 @@ def build_mart(engine) -> dict:
 
     with engine.connect() as conn:
         rows = conn.execute(
-            text(f"SELECT count(*) FROM {S}.mart_route_card")
+            text(f"SELECT count(*) FROM {MART}.route_card")
         ).scalar()
         groups = conn.execute(
-            text(f"SELECT count(*) FROM {S}.core_price_body_group")
+            text(f"SELECT count(*) FROM {CORE}.price_body_group")
         ).scalar()
-    logger.info("Mart rebuilt: %s rows in mart_route_card, %s in core_price_body_group", rows, groups)
+    logger.info("Mart rebuilt: %s rows in mart.route_card, %s in core.price_body_group", rows, groups)
     return {"mart_rows": rows, "body_groups": groups}
 
 
@@ -53,8 +54,8 @@ def main():
     stats = build_mart(engine)
     print("=" * 60)
     print("Mart build summary (Question 2)")
-    print(f"mart_route_card rows        : {stats['mart_rows']}")
-    print(f"core_price_body_group rows  : {stats['body_groups']}")
+    print(f"mart.route_card rows        : {stats['mart_rows']}")
+    print(f"core.price_body_group rows  : {stats['body_groups']}")
     print("=" * 60)
     engine.dispose()
 

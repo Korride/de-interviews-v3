@@ -27,9 +27,9 @@ def main():
     )
 
     engine = create_engine(config.sqlalchemy_url)
-    S = config.schema_quoted
+    MART = config.mart
 
-    df = build_features(engine, S)
+    df = build_features(engine)
     logging.info("Features built for %d core facts", len(df))
 
     # Strict time-based split population (factual completed direct deals, clean).
@@ -73,8 +73,8 @@ def main():
     logging.info("Future planned deals to score: %d", len(future))
 
     future_pred = result["model"].predict(future[FEATURE_COLUMNS])
-    n = save_predictions(engine, S, test, result["y_pred"], future, future_pred, MODEL_NAME)
-    print(f" Saved {n} predictions -> ml_price_predictions "
+    n = save_predictions(engine, MART, test, result["y_pred"], future, future_pred, MODEL_NAME)
+    print(f" Saved {n} predictions -> mart.ml_price_predictions "
           f"({len(test)} test + {len(future)} future)")
     engine.dispose()
 

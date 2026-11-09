@@ -1,15 +1,17 @@
 -- =============================================================================
 --  Analytical mart + ML tables for the «Smart Logistics» test assignment.
---  Schema: TEST_V3.
+--  Layer: mart (built on top of core).
 -- =============================================================================
 
-SET search_path TO "TEST_V3";
+CREATE SCHEMA IF NOT EXISTS mart;
+
+SET search_path TO mart;
 
 -- -----------------------------------------------------------------------------
 -- 1. Route card / market corridor mart.
 --    grain: month x loading city x unloading city x body_group x weight_category
 -- -----------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS mart_route_card (
+CREATE TABLE IF NOT EXISTS route_card (
     month               date        NOT NULL,
     loading_city_gcid   integer     NOT NULL,
     unloading_city_gcid integer     NOT NULL,
@@ -40,8 +42,8 @@ CREATE TABLE IF NOT EXISTS mart_route_card (
     )
 );
 
-CREATE INDEX IF NOT EXISTS mart_route_card_month_idx
-    ON mart_route_card (month);
+CREATE INDEX IF NOT EXISTS route_card_month_idx
+    ON route_card (month);
 
 -- -----------------------------------------------------------------------------
 -- 2. ML batch-inference predictions (fact vs forecast).
@@ -60,5 +62,5 @@ CREATE TABLE IF NOT EXISTS ml_price_predictions (
     scored_at           timestamp(0) DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS ml_pred_loading_date_idx
+CREATE INDEX IF NOT EXISTS ml_predictions_loading_date_idx
     ON ml_price_predictions (loading_date);

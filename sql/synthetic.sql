@@ -1,5 +1,3 @@
-SET search_path TO "TEST_V3";
-
 -- Генератор синтетических данных для тестового задания Middle Data Engineer (PostgreSQL 17, схема sql/schema.sql).
 -- Данные детерминированы (setseed) и воспроизводят реальные краевые случаи предметной области:
 --   * дубли cities.gc_id (одинаковое и разное full_name_local);

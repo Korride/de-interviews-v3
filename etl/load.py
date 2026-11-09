@@ -3,8 +3,8 @@
 
 Uses psycopg2.extras.execute_values with page_size batching, which internally
 runs a single multi-row statement per page. Every load is an UPSERT:
-  * core_fact_prices      -> ON CONFLICT (price_id) DO UPDATE
-  * dq_quarantine_prices  -> ON CONFLICT (price_id, reason_code) DO NOTHING
+  * core.fact_prices      -> ON CONFLICT (price_id) DO UPDATE
+  * core.dq_quarantine_prices -> ON CONFLICT (price_id, reason_code) DO NOTHING
 """
 import datetime
 import logging
@@ -55,7 +55,7 @@ def batch_execute_values(conn, sql: str, rows) -> int:
 
 
 def upsert_fact_prices(conn: Connection, schema: str, good_df: pd.DataFrame) -> int:
-    """Upsert cleaned facts into {schema}.core_fact_prices."""
+    """Upsert cleaned facts into {schema}.fact_prices."""
     columns = [
         "price_id", "loading_date", "end_loading_date",
         "loading_city_gcid", "unloading_city_gcid",
@@ -69,11 +69,11 @@ def upsert_fact_prices(conn: Connection, schema: str, good_df: pd.DataFrame) -> 
     col_list = ", ".join(columns)
     update_set = ", ".join(f"{c} = EXCLUDED.{c}" for c in columns if c != "price_id")
     sql = (
-        f"INSERT INTO {schema}.core_fact_prices ({col_list}) VALUES %s "
+        f"INSERT INTO {schema}.fact_prices ({col_list}) VALUES %s "
         f"ON CONFLICT (price_id) DO UPDATE SET {update_set}"
     )
     n = batch_execute_values(conn, sql, _tuples(good_df, columns))
-    logger.info("Upserted %d rows into core_fact_prices", n)
+    logger.info("Upserted %d rows into core.fact_prices", n)
     return n
 
 
@@ -85,7 +85,7 @@ def upsert_quarantine(conn: Connection, schema: str, dq_df: pd.DataFrame) -> int
     )
     rows = [(row.price_id, row.reason_code, None) for row in dq_df.itertuples(index=False)]
     n = batch_execute_values(conn, sql, rows)
-    logger.info("Inserted %d rows into dq_quarantine_prices", n)
+    logger.info("Inserted %d rows into core.dq_quarantine_prices", n)
     return n
 
 

@@ -9,6 +9,8 @@ Leakage-free by construction:
 import numpy as np
 import pandas as pd
 
+from etl.config import config
+
 #: Fixed snapshot date of the assignment (NOT the system date).
 AS_OF = pd.Timestamp("2026-10-26")
 
@@ -51,20 +53,21 @@ def _body_group(s: pd.Series) -> pd.Series:
     return s.map(f)
 
 
-def build_features(engine, schema: str) -> pd.DataFrame:
-    """Read enriched facts + dimensions and compute the full feature set."""
+def build_features(engine) -> pd.DataFrame:
+    """Read enriched facts + dimensions from core and compute the feature set."""
     facts = pd.read_sql(
         f"""
         SELECT price_id, loading_date, loading_city_gcid, unloading_city_gcid,
                distance, total_weight, total_volume, body_type,
                weight_category, volume_category, price_rub,
                is_fact, complex, outlier_mark
-        FROM {schema}.core_fact_prices
+        FROM {config.core}.fact_prices
+        ORDER BY price_id          -- deterministic row order (reproducible training)
         """,
         engine,
     )
     cities = pd.read_sql(
-        f"SELECT gc_id, latitude, longitude, region FROM {schema}.core_dim_city",
+        f"SELECT gc_id, latitude, longitude, region FROM {config.core}.dim_city ORDER BY gc_id",
         engine,
     )
     c = cities.set_index("gc_id")

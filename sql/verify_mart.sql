@@ -1,14 +1,12 @@
 -- =============================================================================
---  Verification of the Question 2 mart (mart_route_card).
+--  Verification of the Question 2 mart (mart.route_card).
 -- =============================================================================
-
-SET search_path TO "TEST_V3";
 
 -- === reliability_level distribution ===
 SELECT
     reliability_level,
     count(*) AS n
-FROM mart_route_card
+FROM mart.route_card
 GROUP BY reliability_level
 ORDER BY reliability_level;
 
@@ -24,7 +22,7 @@ SELECT
     median_trip,
     median_km,
     reliability_level
-FROM mart_route_card
+FROM mart.route_card
 ORDER BY trips_count DESC
 LIMIT 10;
 
@@ -33,7 +31,7 @@ SELECT
     count(*)                                                                  AS total,
     count(DISTINCT (month, loading_city_gcid, unloading_city_gcid,
                     body_group, weight_category))                             AS distinct_grain
-FROM mart_route_card;
+FROM mart.route_card;
 
 -- === cross-check one cell: Москва->Казань, Тент, FTL, Oct 2026 ===
 WITH manual AS (
@@ -42,10 +40,10 @@ WITH manual AS (
         count(DISTINCT f.price_id)                                        AS n,
         percentile_cont(0.50) WITHIN GROUP (ORDER BY f.price_rub)         AS med,
         avg(f.price_rub)                                                  AS avg_price
-    FROM core_fact_prices f
-    JOIN core_price_body_group g
+    FROM core.fact_prices f
+    JOIN core.price_body_group g
         ON g.price_id = f.price_id
-    JOIN price_dates pd
+    JOIN raw.price_dates pd
         ON pd.price_id = f.price_id
     WHERE f.is_fact
       AND NOT f.complex
@@ -73,7 +71,7 @@ SELECT
     trips_count,
     round(median_trip::numeric, 2) AS mart_median,
     round(avg_trip::numeric, 2)    AS mart_avg
-FROM mart_route_card
+FROM mart.route_card
 WHERE loading_city_gcid   = 1001
   AND unloading_city_gcid = 1003
   AND body_group     = 'Тент'

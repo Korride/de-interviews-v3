@@ -1,5 +1,3 @@
-SET search_path TO "TEST_V3";
-
 -- Эталонная DDL-схема операционной БД deals_bigdata (PostgreSQL 17).
 -- Используется как источник данных в тестовом задании Middle Data Engineer («Умная Логистика»).
 

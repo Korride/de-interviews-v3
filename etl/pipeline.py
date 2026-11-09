@@ -17,7 +17,8 @@ from etl.load import log_batch, upsert_fact_prices, upsert_quarantine
 
 logger = logging.getLogger("etl.pipeline")
 
-S = config.schema_quoted  # quoted schema identifier, e.g. "TEST_V3"
+RAW = config.raw      # raw layer, e.g. raw
+CORE = config.core    # core layer, e.g. core
 
 
 def _read_prices(engine, start_date, end_date) -> pd.DataFrame:
@@ -28,7 +29,7 @@ def _read_prices(engine, start_date, end_date) -> pd.DataFrame:
                price, currency_code, complex, price_type, is_fact,
                nearest_rate_date, organization_id, subscriber_id,
                outlier_mark, weight_category, volume_category, source
-        FROM {S}.prices
+        FROM {RAW}.prices
     """
     where, params = [], {}
     if start_date:
@@ -44,12 +45,12 @@ def _read_prices(engine, start_date, end_date) -> pd.DataFrame:
 
 def _read_rates(engine) -> pd.DataFrame:
     return pd.read_sql(
-        f"SELECT num_code, setting_date, value FROM {S}.exchange_rates", engine
+        f"SELECT num_code, setting_date, value FROM {RAW}.exchange_rates", engine
     )
 
 
 def _read_city_keys(engine) -> pd.DataFrame:
-    return pd.read_sql(f"SELECT gc_id, city_id FROM {S}.core_dim_city", engine)
+    return pd.read_sql(f"SELECT gc_id, city_id FROM {CORE}.dim_city", engine)
 
 
 def _transform(raw: pd.DataFrame, rates: pd.DataFrame, city_keys: pd.DataFrame):
@@ -124,7 +125,7 @@ def run_pipeline(start_date=None, end_date=None):
         quarantine_df = bad[["price_id", "_reason"]].rename(
             columns={"_reason": "reason_code"}
         )
-        upsert_quarantine(conn, S, quarantine_df)
+        upsert_quarantine(conn, CORE, quarantine_df)
 
         core_cols = [
             "price_id", "loading_date", "end_loading_date",
@@ -137,9 +138,9 @@ def run_pipeline(start_date=None, end_date=None):
             "volume_category", "source",
         ]
         good = good.assign(price_original=good["price"])
-        upsert_fact_prices(conn, S, good[core_cols])
+        upsert_fact_prices(conn, CORE, good[core_cols])
 
-        log_batch(conn, S, start_date, end_date, "success",
+        log_batch(conn, CORE, start_date, end_date, "success",
                   len(raw), len(good), len(bad))
 
     # Output summary

@@ -1,24 +1,22 @@
 -- =============================================================================
---  Row counts across the source and analytical tables.
+--  Row counts across the raw, core and mart layers.
 -- =============================================================================
 
-SET search_path TO "TEST_V3";
-
-SELECT 'prices'              AS table_name, count(*) AS row_count FROM prices
+SELECT 'raw.prices'            AS table_name, count(*) AS row_count FROM raw.prices
 UNION ALL
-SELECT 'cities',             count(*) FROM cities
+SELECT 'raw.cities',            count(*) FROM raw.cities
 UNION ALL
-SELECT 'body_types',         count(*) FROM body_types
+SELECT 'raw.body_types',        count(*) FROM raw.body_types
 UNION ALL
-SELECT 'price_body_types',   count(*) FROM price_body_types
+SELECT 'raw.price_body_types',  count(*) FROM raw.price_body_types
 UNION ALL
-SELECT 'price_dates',        count(*) FROM price_dates
+SELECT 'raw.price_dates',       count(*) FROM raw.price_dates
 UNION ALL
-SELECT 'exchange_rates',     count(*) FROM exchange_rates
+SELECT 'raw.exchange_rates',    count(*) FROM raw.exchange_rates
 UNION ALL
-SELECT 'price_group_stats',  count(*) FROM price_group_stats
+SELECT 'raw.price_group_stats', count(*) FROM raw.price_group_stats
 UNION ALL
-SELECT 'price_participants', count(*) FROM price_participants
+SELECT 'raw.price_participants', count(*) FROM raw.price_participants
 UNION ALL
-SELECT 'core_dim_city',      count(*) FROM core_dim_city
+SELECT 'core.dim_city',         count(*) FROM core.dim_city
 ORDER BY table_name;

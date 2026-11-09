@@ -23,7 +23,10 @@ services:
       DB_NAME: deals_bigdata
       DB_USER: postgres
       DB_PASSWORD: ${POSTGRES_PASSWORD:-root}
-      DB_SCHEMA: TEST_V3
+      DB_RAW_SCHEMA: raw
+      DB_CORE_SCHEMA: core
+      DB_MART_SCHEMA: mart
+      N_PRICES: ${N_PRICES:-300000}
     depends_on:
       db:
         condition: service_healthy

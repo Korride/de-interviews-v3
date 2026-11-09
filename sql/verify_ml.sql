@@ -1,27 +1,25 @@
 -- =============================================================================
---  Verification of the Question 3 ML predictions (ml_price_predictions).
+--  Verification of the Question 3 ML predictions (mart.ml_price_predictions).
 -- =============================================================================
-
-SET search_path TO "TEST_V3";
 
 -- === prediction table breakdown ===
 SELECT
     count(*)                                            AS total,
     count(*) FILTER (WHERE actual_price_rub IS NOT NULL) AS test_rows,
     count(*) FILTER (WHERE actual_price_rub IS NULL)      AS future_rows
-FROM ml_price_predictions;
+FROM mart.ml_price_predictions;
 
 -- === future rows must have NULL actual/error/ape ===
 SELECT
     count(*) AS future_with_null_err
-FROM ml_price_predictions
+FROM mart.ml_price_predictions
 WHERE actual_price_rub IS NULL
   AND abs_error_rub IS NULL
   AND ape_pct IS NULL;
 
 SELECT
     count(*) AS future_with_filled_err
-FROM ml_price_predictions
+FROM mart.ml_price_predictions
 WHERE actual_price_rub IS NULL
   AND (abs_error_rub IS NOT NULL OR ape_pct IS NOT NULL);
 
@@ -35,7 +33,7 @@ SELECT
     round(actual_price_rub::numeric)       AS actual,
     round(predicted_price_rub::numeric)    AS predicted,
     round(ape_pct::numeric, 1)             AS ape_pct
-FROM ml_price_predictions
+FROM mart.ml_price_predictions
 WHERE actual_price_rub IS NOT NULL
 ORDER BY price_id
 LIMIT 8;
@@ -44,11 +42,11 @@ LIMIT 8;
 SELECT
     round(avg(ape_pct)::numeric, 2)        AS mean_ape_pct,
     round(avg(abs_error_rub)::numeric, 2)  AS mean_abs_error
-FROM ml_price_predictions
+FROM mart.ml_price_predictions
 WHERE actual_price_rub IS NOT NULL;
 
 -- === idempotency: distinct price_ids ===
 SELECT
-    count(*)                AS total_rows,
+    count(*)                 AS total_rows,
     count(DISTINCT price_id) AS distinct_ids
-FROM ml_price_predictions;
+FROM mart.ml_price_predictions;
