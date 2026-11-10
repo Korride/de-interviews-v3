@@ -15,3 +15,8 @@ requirements*.txt text eol=lf
 
 # Never attempt to convert binary/archive assets.
 *.html   text eol=lf
+
+# Binary images
+*.jpg  binary
+*.jpeg binary
+*.png  binary

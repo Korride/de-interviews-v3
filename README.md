@@ -78,7 +78,7 @@ mart.ml_price_predictions (факт vs прогноз тарифа)
 │   ├── score.py              #   batch inference → mart.ml_price_predictions
 │   └── main.py               #   CLI: python -m ml.main
 ├── tests/                    # pytest (правила DQ, утечки, идемпотентность)
-└── docs/                     # материалы задания + демо-дашборд
+└── docs/                     # материалы задания, демо-дашборд, screenshots/
 ```
 
 ---
@@ -275,6 +275,30 @@ psql -U postgres -d deals_bigdata -f sql/verify_etl.sql
 psql -U postgres -d deals_bigdata -f sql/verify_mart.sql
 psql -U postgres -d deals_bigdata -f sql/verify_ml.sql
 ```
+
+---
+
+## Скриншоты витрин и таблиц
+
+Скриншоты из DBeaver по итогам прогона пайплайна (схемы `core` и `mart`).
+
+### `core.dim_city` — дедуплицированный справочник городов
+
+40 уникальных `gc_id` после схлопывания дублей; `region` извлечён из `full_name_local`, координаты сохранены.
+
+![core.dim_city](docs/screenshots/01-core-dim-city.jpg)
+
+### `mart.route_card` — карточка маршрута и рыночный коридор
+
+Помесячная история по маршруту Москва → Санкт-Петербург: `p25 / median / p75 / avg` за рейс и за км, разрез по группе кузова и весовой категории.
+
+![mart.route_card](docs/screenshots/02-mart-route-card.jpg)
+
+### `mart.ml_price_predictions` — факт vs прогноз
+
+Отложенный тестовый период и будущие заявки: `actual_price_rub`, `predicted_price_rub`, `abs_error_rub`, `ape_pct`. У будущих строк (`loading_date > 2026-10-26`) факт и ошибки — `NULL`.
+
+![mart.ml_price_predictions](docs/screenshots/03-mart-ml-price-predictions.jpg)
 
 ---
 
