@@ -62,15 +62,23 @@ def _body_group(s: pd.Series) -> pd.Series:
     return s.map(f)
 
 
-def build_features(engine) -> pd.DataFrame:
-    """Read enriched facts + dimensions from core and compute the feature set."""
+def build_features(engine, since=None) -> pd.DataFrame:
+    """Read enriched facts + dimensions from core and compute the feature set.
+
+    Only rows that can participate in train/test/future scoring are read
+    (``loading_date >= TRAIN_START``): predicate pushdown keeps the read
+    proportional to the model window instead of the whole history.
+    """
+    since = pd.Timestamp(since) if since is not None else TRAIN_START
     facts = pd.read_sql(
         f"""
         SELECT {", ".join(ML_FACT_COLUMNS)}
         FROM {config.core}.{TABLE_FACT_PRICES}
+        WHERE loading_date >= %(since)s
         ORDER BY price_id          -- deterministic row order (reproducible training)
         """,
         engine,
+        params={"since": since.date()},
     )
     cities = pd.read_sql(
         f"""

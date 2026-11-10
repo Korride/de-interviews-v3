@@ -17,6 +17,7 @@ from constants import (
     DEFAULT_DB_USER,
     DEFAULT_MART_SCHEMA,
     DEFAULT_RAW_SCHEMA,
+    ETL_READ_CHUNK_ROWS as DEFAULT_ETL_READ_CHUNK_ROWS,
 )
 
 # .env must not override already-set environment variables (e.g. -e flags in Docker).
@@ -41,6 +42,9 @@ class Config:
     MART_SCHEMA = os.getenv("DB_MART_SCHEMA", DEFAULT_MART_SCHEMA)
 
     AS_OF_DATE = os.getenv("AS_OF_DATE", DEFAULT_AS_OF_DATE)
+
+    #: Rows per streaming read chunk (memory is O(chunk), not O(table)).
+    ETL_READ_CHUNK_ROWS = int(os.getenv("ETL_READ_CHUNK_ROWS", str(DEFAULT_ETL_READ_CHUNK_ROWS)))
 
     @property
     def sqlalchemy_url(self) -> str:

@@ -1,6 +1,13 @@
 # -*- coding: utf-8 -*-
-"""Question 1 ETL pipeline: extract -> validate/cleanse -> convert -> load Core DWH."""
+"""Question 1 ETL pipeline: extract -> validate/cleanse -> convert -> load Core DWH.
+
+Источник читается **потоково батчами** (server-side cursor через pandas
+`chunksize`), поэтому потребление памяти ограничено размером чанка
+(`ETL_READ_CHUNK_ROWS`), а не объёмом таблицы. Запись — пачками
+`execute_values` (`BATCH_PAGE_SIZE`). Итоговое потребление: O(chunk).
+"""
 import logging
+from collections import Counter
 
 import numpy as np
 import pandas as pd
@@ -48,7 +55,11 @@ PRICES_SOURCE_COLUMNS = (
 )
 
 
-def _read_prices(engine, start_date, end_date) -> pd.DataFrame:
+def _iter_price_chunks(engine, start_date=None, end_date=None):
+    """Stream source rows in bounded chunks (server-side cursor).
+
+    Memory footprint is O(ETL_READ_CHUNK_ROWS), independent of table size.
+    """
     select_list = ", ".join(PRICES_SOURCE_COLUMNS)
     sql = f"SELECT {select_list} FROM {RAW}.{TABLE_PRICES}"
     where, params = [], {}
@@ -60,7 +71,11 @@ def _read_prices(engine, start_date, end_date) -> pd.DataFrame:
         params["end"] = end_date
     if where:
         sql += " WHERE " + " AND ".join(where)
-    return pd.read_sql(sql, engine, params=params)
+    sql += " ORDER BY id"          # deterministic order, uses the PK index
+
+    yield from pd.read_sql(
+        sql, engine, params=params, chunksize=config.ETL_READ_CHUNK_ROWS
+    )
 
 
 def _read_rates(engine) -> pd.DataFrame:
@@ -125,52 +140,72 @@ def _transform(raw: pd.DataFrame, rates: pd.DataFrame, city_keys: pd.DataFrame):
     return df, bad_mask
 
 
+def _peak_rss_mb():
+    """Peak resident set size of this process, MB (Linux containers)."""
+    try:
+        import resource
+
+        return round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+    except Exception:  # pragma: no cover - non-Unix platforms
+        return None
+
+
 def run_pipeline(start_date=None, end_date=None):
     engine = create_engine(config.sqlalchemy_url)
 
-    raw = _read_prices(engine, start_date, end_date)
-    logger.info("Read %d rows from prices (window %s..%s)",
-                len(raw), start_date or "min", end_date or "max")
-
-    if raw.empty:
-        logger.warning("Nothing to process; exiting")
-        return
-
+    # Dimensions are tiny (40 cities, ~2.7k rates) and are cached in memory.
     rates = _read_rates(engine)
     city_keys = _read_city_keys(engine)
-    df, bad_mask = _transform(raw, rates, city_keys)
 
-    good = df[~bad_mask]
-    bad = df[bad_mask]
+    total_read = total_loaded = total_bad = 0
+    reason_counts = Counter()
 
-    # Summary per reason
-    reason_counts = bad["_reason"].value_counts().to_dict()
-
+    # One transaction for the whole run; reads stream on a separate connection.
     with engine.begin() as conn:
-        quarantine_df = bad[["price_id", "_reason"]].rename(
-            columns={"_reason": "reason_code"}
-        )
-        upsert_quarantine(conn, CORE, quarantine_df)
+        for chunk in _iter_price_chunks(engine, start_date, end_date):
+            total_read += len(chunk)
 
-        good = good.assign(price_original=good["price"])
-        upsert_fact_prices(conn, CORE, good[list(CORE_FACT_COLUMNS)])
+            df, bad_mask = _transform(chunk, rates, city_keys)
+            good = df[~bad_mask]
+            bad = df[bad_mask]
+
+            if not bad.empty:
+                quarantine_df = bad[["price_id", "_reason"]].rename(
+                    columns={"_reason": "reason_code"}
+                )
+                upsert_quarantine(conn, CORE, quarantine_df)
+                reason_counts.update(bad["_reason"].value_counts().to_dict())
+
+            if not good.empty:
+                good = good.assign(price_original=good["price"])
+                upsert_fact_prices(conn, CORE, good[list(CORE_FACT_COLUMNS)])
+
+            total_loaded += len(good)
+            total_bad += len(bad)
+
+        if total_read == 0:
+            logger.warning("Nothing to process; exiting")
+            return {"read": 0, "loaded": 0, "quarantined": 0}
 
         log_batch(conn, CORE, start_date, end_date, "success",
-                  len(raw), len(good), len(bad))
+                  total_read, total_loaded, total_bad)
 
     # Output summary
+    peak_mb = _peak_rss_mb()
     print("=" * 60)
     print("ETL run summary (Question 1)")
     print("=" * 60)
     print(f"window           : {start_date or 'min'} .. {end_date or 'max'}")
-    print(f"rows read        : {len(raw)}")
-    print(f"rows loaded      : {len(good)}")
-    print(f"rows quarantined : {len(bad)}")
+    print(f"rows read        : {total_read}")
+    print(f"rows loaded      : {total_loaded}")
+    print(f"rows quarantined : {total_bad}")
     for reason in REASON_PRIORITY:
         n = reason_counts.get(reason, 0)
         if n:
             print(f"  - {reason:<20} {n}")
+    if peak_mb is not None:
+        print(f"peak RSS         : {peak_mb} MB")
     print("=" * 60)
 
     engine.dispose()
-    return {"read": len(raw), "loaded": len(good), "quarantined": len(bad)}
+    return {"read": total_read, "loaded": total_loaded, "quarantined": total_bad}
