@@ -6,13 +6,30 @@ import numpy as np
 import pandas as pd
 from sqlalchemy import create_engine
 
-from etl.config import config
-from etl.dq import (
+from constants import (
+    CORE_FACT_COLUMNS,
+    CURRENCY_RUB,
+    DISTANCE_MIN_EXCLUSIVE,
     FOREIGN_CURRENCIES,
+    PRICE_MIN_EXCLUSIVE,
+    PRICE_RUB_DECIMALS,
+    REASON_INVALID_DISTANCE,
+    REASON_INVALID_PRICE,
+    REASON_INVALID_WEIGHT_VOLUME,
+    REASON_MISSING_RATE,
     REASON_PRIORITY,
-    volume_category,
-    weight_category,
+    REASON_RUB_PRICE_TOO_LOW,
+    REASON_UNKNOWN_CITY,
+    RUB_MIN_PRICE,
+    RUB_RATE,
+    TABLE_DIM_CITY,
+    TABLE_EXCHANGE_RATES,
+    TABLE_PRICES,
+    VOLUME_MIN,
+    WEIGHT_MIN,
 )
+from etl.config import config
+from etl.dq import volume_category, weight_category
 from etl.load import log_batch, upsert_fact_prices, upsert_quarantine
 
 logger = logging.getLogger("etl.pipeline")
@@ -20,17 +37,20 @@ logger = logging.getLogger("etl.pipeline")
 RAW = config.raw      # raw layer, e.g. raw
 CORE = config.core    # core layer, e.g. core
 
+#: Columns read from the source `prices` table.
+PRICES_SOURCE_COLUMNS = (
+    "id", "loading_date", "end_loading_date",
+    "loading_city_gcid", "unloading_city_gcid",
+    "distance", "total_weight", "total_volume", "body_type",
+    "price", "currency_code", "complex", "price_type", "is_fact",
+    "nearest_rate_date", "organization_id", "subscriber_id",
+    "outlier_mark", "weight_category", "volume_category", "source",
+)
+
 
 def _read_prices(engine, start_date, end_date) -> pd.DataFrame:
-    sql = f"""
-        SELECT id, loading_date, end_loading_date,
-               loading_city_gcid, unloading_city_gcid,
-               distance, total_weight, total_volume, body_type,
-               price, currency_code, complex, price_type, is_fact,
-               nearest_rate_date, organization_id, subscriber_id,
-               outlier_mark, weight_category, volume_category, source
-        FROM {RAW}.prices
-    """
+    select_list = ", ".join(PRICES_SOURCE_COLUMNS)
+    sql = f"SELECT {select_list} FROM {RAW}.{TABLE_PRICES}"
     where, params = [], {}
     if start_date:
         where.append("loading_date >= %(start)s")
@@ -45,12 +65,12 @@ def _read_prices(engine, start_date, end_date) -> pd.DataFrame:
 
 def _read_rates(engine) -> pd.DataFrame:
     return pd.read_sql(
-        f"SELECT num_code, setting_date, value FROM {RAW}.exchange_rates", engine
+        f"SELECT num_code, setting_date, value FROM {RAW}.{TABLE_EXCHANGE_RATES}", engine
     )
 
 
 def _read_city_keys(engine) -> pd.DataFrame:
-    return pd.read_sql(f"SELECT gc_id, city_id FROM {CORE}.dim_city", engine)
+    return pd.read_sql(f"SELECT gc_id, city_id FROM {CORE}.{TABLE_DIM_CITY}", engine)
 
 
 def _transform(raw: pd.DataFrame, rates: pd.DataFrame, city_keys: pd.DataFrame):
@@ -66,7 +86,7 @@ def _transform(raw: pd.DataFrame, rates: pd.DataFrame, city_keys: pd.DataFrame):
         columns={"num_code": "currency_code", "setting_date": "nearest_rate_date"}
     )[["currency_code", "nearest_rate_date", "value"]]
     df = df.merge(r, how="left", on=["currency_code", "nearest_rate_date"])
-    df["exchange_rate"] = np.where(df["currency_code"] == "643", 1.0, df["value"])
+    df["exchange_rate"] = np.where(df["currency_code"] == CURRENCY_RUB, RUB_RATE, df["value"])
 
     # --- City validation + deduplicated city keys ---
     city_map = city_keys.set_index("gc_id")["city_id"].to_dict()
@@ -74,16 +94,21 @@ def _transform(raw: pd.DataFrame, rates: pd.DataFrame, city_keys: pd.DataFrame):
     df["loading_city_id"] = df["loading_city_gcid"].map(city_map)
     df["unloading_city_id"] = df["unloading_city_gcid"].map(city_map)
 
-    # --- DQ flags ---
+    # --- DQ flags (reason codes are constants) ---
     foreign = df["currency_code"].isin(FOREIGN_CURRENCIES)
     flags = {
-        "INVALID_PRICE": df["price"] <= 0,
-        "RUB_PRICE_TOO_LOW": (df["currency_code"] == "643") & (df["price"] <= 1000) & (df["price"] > 0),
-        "INVALID_DISTANCE": df["distance"] <= 0,
-        "INVALID_WEIGHT_VOLUME": (df["total_weight"] < 0) | (df["total_volume"] < 0),
-        "UNKNOWN_CITY": ~df["loading_city_gcid"].isin(valid_gcids)
-                        | ~df["unloading_city_gcid"].isin(valid_gcids),
-        "MISSING_RATE": foreign & df["exchange_rate"].isna(),
+        REASON_INVALID_PRICE: df["price"] <= PRICE_MIN_EXCLUSIVE,
+        REASON_RUB_PRICE_TOO_LOW: (
+            (df["currency_code"] == CURRENCY_RUB)
+            & (df["price"] <= RUB_MIN_PRICE)
+            & (df["price"] > PRICE_MIN_EXCLUSIVE)
+        ),
+        REASON_INVALID_DISTANCE: df["distance"] <= DISTANCE_MIN_EXCLUSIVE,
+        REASON_INVALID_WEIGHT_VOLUME: (df["total_weight"] < WEIGHT_MIN)
+                                      | (df["total_volume"] < VOLUME_MIN),
+        REASON_UNKNOWN_CITY: ~df["loading_city_gcid"].isin(valid_gcids)
+                             | ~df["unloading_city_gcid"].isin(valid_gcids),
+        REASON_MISSING_RATE: foreign & df["exchange_rate"].isna(),
     }
 
     # Single reason per row (priority order, first match wins).
@@ -94,7 +119,7 @@ def _transform(raw: pd.DataFrame, rates: pd.DataFrame, city_keys: pd.DataFrame):
     bad_mask = df["_reason"].notna()
 
     # --- price_rub (only for clean rows; RUB without VAT) ---
-    df["price_rub"] = np.round(df["price"] * df["exchange_rate"], 2)
+    df["price_rub"] = np.round(df["price"] * df["exchange_rate"], PRICE_RUB_DECIMALS)
     df.loc[bad_mask, "price_rub"] = np.nan
 
     return df, bad_mask
@@ -127,18 +152,8 @@ def run_pipeline(start_date=None, end_date=None):
         )
         upsert_quarantine(conn, CORE, quarantine_df)
 
-        core_cols = [
-            "price_id", "loading_date", "end_loading_date",
-            "loading_city_gcid", "unloading_city_gcid",
-            "loading_city_id", "unloading_city_id",
-            "distance", "total_weight", "total_volume", "body_type",
-            "currency_code", "price_original", "exchange_rate", "price_rub",
-            "price_type", "is_fact", "complex", "organization_id",
-            "subscriber_id", "outlier_mark", "weight_category",
-            "volume_category", "source",
-        ]
         good = good.assign(price_original=good["price"])
-        upsert_fact_prices(conn, CORE, good[core_cols])
+        upsert_fact_prices(conn, CORE, good[list(CORE_FACT_COLUMNS)])
 
         log_batch(conn, CORE, start_date, end_date, "success",
                   len(raw), len(good), len(bad))

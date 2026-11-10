@@ -1,8 +1,23 @@
 # -*- coding: utf-8 -*-
-"""Configuration loaded from environment variables (see .env / .env.example)."""
+"""Configuration loaded from environment variables (see .env / .env.example).
+
+Значения по умолчанию берутся из `constants.py`.
+"""
 import os
 
 from dotenv import load_dotenv
+
+from constants import (
+    AS_OF_DATE as DEFAULT_AS_OF_DATE,
+    DEFAULT_CORE_SCHEMA,
+    DEFAULT_DB_HOST,
+    DEFAULT_DB_NAME,
+    DEFAULT_DB_PASSWORD,
+    DEFAULT_DB_PORT,
+    DEFAULT_DB_USER,
+    DEFAULT_MART_SCHEMA,
+    DEFAULT_RAW_SCHEMA,
+)
 
 # .env must not override already-set environment variables (e.g. -e flags in Docker).
 load_dotenv(override=False)
@@ -14,18 +29,18 @@ def _quoted(name: str) -> str:
 
 
 class Config:
-    DB_HOST = os.getenv("DB_HOST", "localhost")
-    DB_PORT = os.getenv("DB_PORT", "5434")
-    DB_NAME = os.getenv("DB_NAME", "postgres")
-    DB_USER = os.getenv("DB_USER", "postgres")
-    DB_PASSWORD = os.getenv("DB_PASSWORD", "root")
+    DB_HOST = os.getenv("DB_HOST", DEFAULT_DB_HOST)
+    DB_PORT = os.getenv("DB_PORT", DEFAULT_DB_PORT)
+    DB_NAME = os.getenv("DB_NAME", DEFAULT_DB_NAME)
+    DB_USER = os.getenv("DB_USER", DEFAULT_DB_USER)
+    DB_PASSWORD = os.getenv("DB_PASSWORD", DEFAULT_DB_PASSWORD)
 
     # raw -> core -> mart layers
-    RAW_SCHEMA = os.getenv("DB_RAW_SCHEMA", "raw")
-    CORE_SCHEMA = os.getenv("DB_CORE_SCHEMA", "core")
-    MART_SCHEMA = os.getenv("DB_MART_SCHEMA", "mart")
+    RAW_SCHEMA = os.getenv("DB_RAW_SCHEMA", DEFAULT_RAW_SCHEMA)
+    CORE_SCHEMA = os.getenv("DB_CORE_SCHEMA", DEFAULT_CORE_SCHEMA)
+    MART_SCHEMA = os.getenv("DB_MART_SCHEMA", DEFAULT_MART_SCHEMA)
 
-    AS_OF_DATE = os.getenv("AS_OF_DATE", "2026-10-26")
+    AS_OF_DATE = os.getenv("AS_OF_DATE", DEFAULT_AS_OF_DATE)
 
     @property
     def sqlalchemy_url(self) -> str:

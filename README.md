@@ -37,8 +37,14 @@ mart.ml_price_predictions (факт vs прогноз тарифа)
 | Схема | Содержимое |
 |---|---|
 | `raw` | Исходные таблицы задания (`prices`, `cities`, `body_types`, `price_body_types`, `price_dates`, `exchange_rates`, `price_group_stats`, `price_participants`, `selected_directions`, `favorite_directions`, `migrations`) |
-| `core` | `fact_prices`, `dim_city`, `price_body_group`, `dq_quarantine_prices`, `etl_batch_log` |
+| `core` | `fact_prices`, `dim_city`, `price_body_group`, `dq_quarantine_prices`, `etl_batch_log`, `ref_body_group`, `etl_params` |
 | `mart` | `route_card`, `ml_price_predictions` |
+
+### Константы вместо «магических» значений
+
+* **`constants.py`** — единственный источник бизнес-констант для Python: коды валют (`643/840/978`), границы категорий веса/объёма, коды причин карантина, группы кузова (`std_id`), периоды циклического кодирования, параметры ML и **списки колонок** (`CORE_FACT_COLUMNS`, `PREDICTION_COLUMNS`, `ML_FACT_COLUMNS`).
+* **SQL-витрины** не содержат литералов: значения берутся из таблиц-справочников `core.ref_body_group` (группы кузова) и `core.etl_params` (`as_of_date`, пороги надёжности, `rub_min_price`, `volume_ftl_max`, fallback-имена групп). Обе создаются и наполняются в `sql/ddl_core.sql`, ключи совпадают с `PARAM_*` из `constants.py`.
+* Целостность констант проверяется тестами (`tests/test_constants.py`).
 
 ---
 
@@ -47,6 +53,7 @@ mart.ml_price_predictions (факт vs прогноз тарифа)
 ```
 ├── docker-compose.yml        # postgres:17 + one-shot pipeline service
 ├── Dockerfile                # образ пайплайна (python + psql)
+├── constants.py              # единый файл бизнес-констант (валюты, категории, колонки)
 ├── .env.example              # шаблон переменных окружения
 ├── requirements*.txt
 ├── pytest.ini
@@ -233,7 +240,7 @@ pytest                       # все тесты
 pytest -m "not integration"  # только юнит-тесты (без БД)
 ```
 
-Покрывают: правила DQ и категории, отсутствие таргет-утечек в признаках, границы time-split, корректность циклического кодирования, идемпотентность (отсутствие дублей в `core.fact_prices`, `mart.route_card`, `mart.ml_price_predictions`) и `NULL`-ошибки для будущих заявок. **14 тестов, все проходят.**
+Покрывают: правила DQ и категории, отсутствие таргет-утечек в признаках, границы time-split, корректность циклического кодирования, идемпотентность (отсутствие дублей в `core.fact_prices`, `mart.route_card`, `mart.ml_price_predictions`), `NULL`-ошибки для будущих заявок и целостность `constants.py`. **21 тест, все проходят.**
 
 ---
 

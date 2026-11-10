@@ -12,6 +12,12 @@ from pathlib import Path
 
 from sqlalchemy import create_engine, text
 
+from constants import (
+    SQL_STEPS,
+    TABLE_PRICE_BODY_GROUP,
+    TABLE_ROUTE_CARD,
+    TXN_KEYWORDS,
+)
 from etl.config import config
 
 logger = logging.getLogger("etl.mart")
@@ -20,30 +26,28 @@ SQL_DIR = Path(__file__).resolve().parent.parent / "sql"
 CORE = config.core
 MART = config.mart
 
-_TXN_KEYWORDS = {"BEGIN;", "COMMIT;", "ROLLBACK;", "BEGIN", "COMMIT"}
-
 
 def _load_sql(name: str) -> str:
     sql = (SQL_DIR / name).read_text(encoding="utf-8")
-    lines = [ln for ln in sql.splitlines() if ln.strip().upper() not in _TXN_KEYWORDS]
+    lines = [ln for ln in sql.splitlines() if ln.strip().upper() not in TXN_KEYWORDS]
     return "\n".join(lines)
 
 
 def build_mart(engine) -> dict:
-    steps = ["body_groups.sql", "build_mart.sql"]
     with engine.begin() as conn:
-        for step in steps:
+        for step in SQL_STEPS:
             logger.info("Running %s", step)
             conn.exec_driver_sql(_load_sql(step))
 
     with engine.connect() as conn:
         rows = conn.execute(
-            text(f"SELECT count(*) FROM {MART}.route_card")
+            text(f"SELECT count(*) FROM {MART}.{TABLE_ROUTE_CARD}")
         ).scalar()
         groups = conn.execute(
-            text(f"SELECT count(*) FROM {CORE}.price_body_group")
+            text(f"SELECT count(*) FROM {CORE}.{TABLE_PRICE_BODY_GROUP}")
         ).scalar()
-    logger.info("Mart rebuilt: %s rows in mart.route_card, %s in core.price_body_group", rows, groups)
+    logger.info("Mart rebuilt: %s rows in mart.%s, %s in core.%s",
+                rows, TABLE_ROUTE_CARD, groups, TABLE_PRICE_BODY_GROUP)
     return {"mart_rows": rows, "body_groups": groups}
 
 
@@ -54,8 +58,8 @@ def main():
     stats = build_mart(engine)
     print("=" * 60)
     print("Mart build summary (Question 2)")
-    print(f"mart.route_card rows        : {stats['mart_rows']}")
-    print(f"core.price_body_group rows  : {stats['body_groups']}")
+    print(f"mart.{TABLE_ROUTE_CARD} rows        : {stats['mart_rows']}")
+    print(f"core.{TABLE_PRICE_BODY_GROUP} rows  : {stats['body_groups']}")
     print("=" * 60)
     engine.dispose()
 

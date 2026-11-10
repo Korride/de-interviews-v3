@@ -9,9 +9,16 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.tree import DecisionTreeRegressor
 
-from ml.features import CATEGORICAL_FEATURES, FEATURE_COLUMNS, NUMERIC_FEATURES, TARGET
+from constants import (
+    CATBOOST_PARAMS,
+    DECISION_TREE_PARAMS,
+    PERCENT,
+    RANDOM_SEED,
+    RIDGE_PARAMS,
+)
+from ml.features import CATEGORICAL_FEATURES, FEATURE_COLUMNS, TARGET
 
-SEED = 42
+SEED = RANDOM_SEED
 
 
 def compute_metrics(y_true, y_pred) -> dict:
@@ -19,7 +26,7 @@ def compute_metrics(y_true, y_pred) -> dict:
     y_pred = np.asarray(y_pred, dtype=float)
     return {
         "r2": float(r2_score(y_true, y_pred)),
-        "mape": float(np.mean(np.abs((y_true - y_pred) / y_true)) * 100),
+        "mape": float(np.mean(np.abs((y_true - y_pred) / y_true)) * PERCENT),
         "rmse": float(np.sqrt(mean_squared_error(y_true, y_pred))),
         "mae": float(mean_absolute_error(y_true, y_pred)),
     }
@@ -36,15 +43,7 @@ def _ordinal_encode(train_df, eval_df, cat_cols):
 
 
 def train_catboost(train_df) -> CatBoostRegressor:
-    model = CatBoostRegressor(
-        iterations=1500,
-        learning_rate=0.08,
-        depth=8,
-        l2_leaf_reg=3.0,
-        loss_function="RMSE",
-        random_seed=SEED,
-        verbose=False,
-    )
+    model = CatBoostRegressor(random_seed=SEED, **CATBOOST_PARAMS)
     model.fit(
         train_df[FEATURE_COLUMNS],
         train_df[TARGET],
@@ -67,12 +66,12 @@ def run_experiment(train_df, test_df) -> dict:
     X_tr_ord = tr_ord[FEATURE_COLUMNS]
     X_te_ord = te_ord[FEATURE_COLUMNS]
 
-    ridge = make_pipeline(StandardScaler(), Ridge(alpha=1.0, random_state=SEED))
+    ridge = make_pipeline(StandardScaler(), Ridge(random_state=SEED, **RIDGE_PARAMS))
     ridge.fit(X_tr_ord, y_train)
     y_ridge = ridge.predict(X_te_ord)
 
     # DecisionTree baseline (comparable to the reference report).
-    dt = DecisionTreeRegressor(max_depth=10, min_samples_leaf=10, random_state=SEED)
+    dt = DecisionTreeRegressor(random_state=SEED, **DECISION_TREE_PARAMS)
     dt.fit(X_tr_ord, y_train)
     y_dt = dt.predict(X_te_ord)
 

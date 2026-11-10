@@ -5,6 +5,14 @@ import logging
 
 from sqlalchemy import create_engine
 
+from constants import (
+    DISTANCE_MIN_EXCLUSIVE,
+    MODEL_NAME,
+    PRICE_MIN_EXCLUSIVE,
+    TABLE_ML_PREDICTIONS,
+    VOLUME_MIN,
+    WEIGHT_MIN,
+)
 from etl.config import config
 from ml.features import (
     AS_OF,
@@ -16,8 +24,6 @@ from ml.features import (
 )
 from ml.score import save_predictions
 from ml.train import run_experiment
-
-MODEL_NAME = "CatBoostRegressor"
 
 
 def main():
@@ -36,8 +42,8 @@ def main():
     base = df[
         df["is_fact"]
         & ~df["complex"]
-        & (df["price_rub"] > 0)
-        & (df["distance"] > 0)
+        & (df["price_rub"] > PRICE_MIN_EXCLUSIVE)
+        & (df["distance"] > DISTANCE_MIN_EXCLUSIVE)
         & ~df["outlier_mark"]
     ]
     train = base[(base["loading_date"] >= TRAIN_START) & (base["loading_date"] < TEST_START)]
@@ -66,15 +72,15 @@ def main():
         (df["loading_date"] > AS_OF)
         & df["is_fact"]
         & ~df["complex"]
-        & (df["distance"] > 0)
-        & (df["total_weight"] >= 0)
-        & (df["total_volume"] >= 0)
+        & (df["distance"] > DISTANCE_MIN_EXCLUSIVE)
+        & (df["total_weight"] >= WEIGHT_MIN)
+        & (df["total_volume"] >= VOLUME_MIN)
     ]
     logging.info("Future planned deals to score: %d", len(future))
 
     future_pred = result["model"].predict(future[FEATURE_COLUMNS])
     n = save_predictions(engine, MART, test, result["y_pred"], future, future_pred, MODEL_NAME)
-    print(f" Saved {n} predictions -> mart.ml_price_predictions "
+    print(f" Saved {n} predictions -> mart.{TABLE_ML_PREDICTIONS} "
           f"({len(test)} test + {len(future)} future)")
     engine.dispose()
 

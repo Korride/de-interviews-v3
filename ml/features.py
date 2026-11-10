@@ -2,42 +2,51 @@
 """Feature engineering for the tariff-prediction model (Question 3).
 
 Leakage-free by construction:
-  * reads only core_fact_prices (already cleaned, no price_group_stats);
+  * reads only core.fact_prices (already cleaned, no price_group_stats);
   * uses outlier_mark ONLY to clean the target in main.py, never as a feature;
   * derives no per-deal rates (price/distance, price/weight) as features.
+
+Все константы (даты, группы кузова, периоды, списки колонок) — в `constants.py`.
 """
 import numpy as np
 import pandas as pd
 
+from constants import (
+    AS_OF_DATE,
+    BODY_GROUP_BY_STD_ID,
+    BODY_GROUP_OTHER,
+    BODY_GROUP_UNKNOWN,
+    CATEGORICAL_FEATURES as _CATEGORICAL_FEATURES,
+    FEATURE_COLUMNS as _FEATURE_COLUMNS,
+    ML_CITY_COLUMNS,
+    ML_FACT_COLUMNS,
+    NUMERIC_FEATURES as _NUMERIC_FEATURES,
+    PERIOD_MONTHS,
+    PERIOD_WEEKDAYS,
+    PERIOD_YEAR_DAYS,
+    TABLE_DIM_CITY,
+    TABLE_FACT_PRICES,
+    TARGET as _TARGET,
+    TEST_END as _TEST_END,
+    TEST_START as _TEST_START,
+    TRAIN_START as _TRAIN_START,
+)
 from etl.config import config
 
-#: Fixed snapshot date of the assignment (NOT the system date).
-AS_OF = pd.Timestamp("2026-10-26")
+# --- Time split: expose as pandas Timestamps (assignment snapshot, NOT now()). ---
+AS_OF = pd.Timestamp(AS_OF_DATE)
+TRAIN_START = pd.Timestamp(_TRAIN_START)     # inclusive
+TEST_START = pd.Timestamp(_TEST_START)       # inclusive (belongs to test)
+TEST_END = pd.Timestamp(_TEST_END)           # inclusive
 
-#: Train / test boundaries (strict time-based split).
-TRAIN_START = pd.Timestamp("2026-07-26")   # inclusive
-TEST_START = pd.Timestamp("2026-10-05")    # inclusive (belongs to test)
-TEST_END = AS_OF                            # inclusive
+# --- Feature groups (re-exported for callers/tests). ---
+NUMERIC_FEATURES = list(_NUMERIC_FEATURES)
+CATEGORICAL_FEATURES = list(_CATEGORICAL_FEATURES)
+FEATURE_COLUMNS = list(_FEATURE_COLUMNS)
+TARGET = _TARGET
 
-#: Primary body-type (std_id) -> business group.
-BODY_GROUP = {56: "Тент", 4: "Рефрижератор", 2: "Изотерм", 15: "Борт"}
-
-NUMERIC_FEATURES = [
-    "distance", "total_weight", "total_volume",
-    "origin_lat", "origin_lon", "dest_lat", "dest_lon",
-    "year",
-    "month_sin", "month_cos",
-    "dow_sin", "dow_cos",
-    "doy_sin", "doy_cos",
-]
-
-CATEGORICAL_FEATURES = [
-    "body_group", "weight_category", "volume_category",
-    "origin_region", "dest_region",
-]
-
-FEATURE_COLUMNS = NUMERIC_FEATURES + CATEGORICAL_FEATURES
-TARGET = "price_rub"
+# --- Body-type (std_id) -> business group. ---
+BODY_GROUP = dict(BODY_GROUP_BY_STD_ID)
 
 
 def _cyclic(t: pd.Series, period: float):
@@ -48,8 +57,8 @@ def _cyclic(t: pd.Series, period: float):
 def _body_group(s: pd.Series) -> pd.Series:
     def f(x):
         if pd.isna(x):
-            return "Не указан"
-        return BODY_GROUP.get(int(x), "Прочие")
+            return BODY_GROUP_UNKNOWN
+        return BODY_GROUP.get(int(x), BODY_GROUP_OTHER)
     return s.map(f)
 
 
@@ -57,17 +66,18 @@ def build_features(engine) -> pd.DataFrame:
     """Read enriched facts + dimensions from core and compute the feature set."""
     facts = pd.read_sql(
         f"""
-        SELECT price_id, loading_date, loading_city_gcid, unloading_city_gcid,
-               distance, total_weight, total_volume, body_type,
-               weight_category, volume_category, price_rub,
-               is_fact, complex, outlier_mark
-        FROM {config.core}.fact_prices
+        SELECT {", ".join(ML_FACT_COLUMNS)}
+        FROM {config.core}.{TABLE_FACT_PRICES}
         ORDER BY price_id          -- deterministic row order (reproducible training)
         """,
         engine,
     )
     cities = pd.read_sql(
-        f"SELECT gc_id, latitude, longitude, region FROM {config.core}.dim_city ORDER BY gc_id",
+        f"""
+        SELECT {", ".join(ML_CITY_COLUMNS)}
+        FROM {config.core}.{TABLE_DIM_CITY}
+        ORDER BY gc_id
+        """,
         engine,
     )
     c = cities.set_index("gc_id")
@@ -85,8 +95,8 @@ def build_features(engine) -> pd.DataFrame:
 
     dt = facts["loading_date"]
     facts["year"] = dt.dt.year
-    facts["month_sin"], facts["month_cos"] = _cyclic(dt.dt.month, 12.0)
-    facts["dow_sin"], facts["dow_cos"] = _cyclic(dt.dt.dayofweek, 7.0)
-    facts["doy_sin"], facts["doy_cos"] = _cyclic(dt.dt.dayofyear, 365.25)
+    facts["month_sin"], facts["month_cos"] = _cyclic(dt.dt.month, PERIOD_MONTHS)
+    facts["dow_sin"], facts["dow_cos"] = _cyclic(dt.dt.dayofweek, PERIOD_WEEKDAYS)
+    facts["doy_sin"], facts["doy_cos"] = _cyclic(dt.dt.dayofyear, PERIOD_YEAR_DAYS)
 
     return facts

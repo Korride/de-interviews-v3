@@ -5,13 +5,15 @@ import logging
 import pandas as pd
 from psycopg2.extras import execute_values
 
-logger = logging.getLogger("ml.score")
+from constants import (
+    BATCH_PAGE_SIZE,
+    MODEL_NAME,
+    PERCENT,
+    PREDICTION_COLUMNS,
+    TABLE_ML_PREDICTIONS,
+)
 
-PREDICTION_COLUMNS = [
-    "price_id", "loading_date", "loading_city_gcid", "unloading_city_gcid",
-    "body_group", "actual_price_rub", "predicted_price_rub",
-    "abs_error_rub", "ape_pct", "model_name",
-]
+logger = logging.getLogger("ml.score")
 
 
 def _to_date(x):
@@ -23,7 +25,7 @@ def _to_date(x):
 
 
 def save_predictions(engine, schema, test_df, test_pred, future_df, future_pred,
-                     model_name="CatBoostRegressor") -> int:
+                     model_name=MODEL_NAME) -> int:
     rows = []
     for i, r in enumerate(test_df.itertuples(index=False)):
         actual = float(r.price_rub)
@@ -32,7 +34,7 @@ def save_predictions(engine, schema, test_df, test_pred, future_df, future_pred,
             int(r.price_id), _to_date(r.loading_date),
             int(r.loading_city_gcid), int(r.unloading_city_gcid),
             str(r.body_group), actual, pred,
-            float(abs(actual - pred)), float(abs(actual - pred) / actual * 100.0),
+            float(abs(actual - pred)), float(abs(actual - pred) / actual * PERCENT),
             model_name,
         ))
     for i, r in enumerate(future_df.itertuples(index=False)):
@@ -48,14 +50,14 @@ def save_predictions(engine, schema, test_df, test_pred, future_df, future_pred,
     col_list = ", ".join(PREDICTION_COLUMNS)
     upd = ", ".join(f"{c} = EXCLUDED.{c}" for c in PREDICTION_COLUMNS if c != "price_id")
     sql = (
-        f"INSERT INTO {schema}.ml_price_predictions ({col_list}) VALUES %s "
+        f"INSERT INTO {schema}.{TABLE_ML_PREDICTIONS} ({col_list}) VALUES %s "
         f"ON CONFLICT (price_id) DO UPDATE SET {upd}, scored_at = now()"
     )
 
     with engine.begin() as conn:
         raw = conn.connection
         with raw.cursor() as cur:
-            execute_values(cur, sql, rows, page_size=10000)
+            execute_values(cur, sql, rows, page_size=BATCH_PAGE_SIZE)
 
-    logger.info("Saved %d predictions into ml_price_predictions", len(rows))
+    logger.info("Saved %d predictions into mart.%s", len(rows), TABLE_ML_PREDICTIONS)
     return len(rows)

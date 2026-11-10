@@ -2,11 +2,11 @@
 --  Question 2: analytical mart «route card / market corridor» (mart.route_card).
 --  grain: month x loading city x unloading city x body_group x weight_category.
 --  Month is formed from raw.price_dates.price_date (long deals span months).
+--  No magic literals: as_of / thresholds / labels come from core.etl_params.
 --  Idempotent: TRUNCATE + INSERT inside one transaction.
 --
 --  Freshness rule (documented): a month cell is «fresh» when
---    (as_of - month_start) <= 30 days  (as_of = 2026-10-26),
---  i.e. only the current month (October 2026) qualifies as fresh.
+--    (as_of - month_start) <= freshness_days.
 -- =============================================================================
 
 SET search_path TO mart;
@@ -37,7 +37,19 @@ INSERT INTO route_card (
     yoy_pct,
     reliability_level
 )
-WITH base AS (
+WITH params AS (
+    SELECT
+        max(value) FILTER (WHERE param = 'as_of_date')::date                AS as_of,
+        max(value) FILTER (WHERE param = 'freshness_days')::int             AS freshness_days,
+        max(value) FILTER (WHERE param = 'reliability_high_trips')::int     AS high_trips,
+        max(value) FILTER (WHERE param = 'reliability_high_carriers')::int  AS high_carriers,
+        max(value) FILTER (WHERE param = 'reliability_medium_trips')::int   AS medium_trips,
+        max(value) FILTER (WHERE param = 'reliability_level_high')          AS level_high,
+        max(value) FILTER (WHERE param = 'reliability_level_medium')        AS level_medium,
+        max(value) FILTER (WHERE param = 'reliability_level_low')           AS level_low
+    FROM core.etl_params
+),
+base AS (
     SELECT
         date_trunc('month', pd.price_date)::date   AS month,
         f.loading_city_gcid,
@@ -65,7 +77,7 @@ WITH base AS (
       AND f.price_rub > 0
       AND f.distance > 0
       AND f.outlier_mark = false
-      AND pd.price_date <= DATE '2026-10-26'
+      AND pd.price_date <= (SELECT as_of FROM params)
 ),
 monthly AS (
     SELECT
@@ -131,17 +143,18 @@ SELECT
         ELSE round(((m.median_trip - py.median_trip) / py.median_trip * 100)::numeric, 2)
     END AS yoy_pct,
 
-    -- reliability level
+    -- reliability level (thresholds and labels from core.etl_params)
     CASE
-        WHEN m.trips_count >= 30
-         AND m.carriers_count >= 5
-         AND (DATE '2026-10-26' - m.month) <= 30
-            THEN 'HIGH'
-        WHEN m.trips_count >= 10
-            THEN 'MEDIUM'
-        ELSE 'LOW_DATA'
+        WHEN m.trips_count >= p.high_trips
+         AND m.carriers_count >= p.high_carriers
+         AND (p.as_of - m.month) <= p.freshness_days
+            THEN p.level_high
+        WHEN m.trips_count >= p.medium_trips
+            THEN p.level_medium
+        ELSE p.level_low
     END AS reliability_level
 FROM monthly m
+CROSS JOIN params p
 LEFT JOIN monthly pm
     ON  pm.loading_city_gcid   = m.loading_city_gcid
     AND pm.unloading_city_gcid = m.unloading_city_gcid

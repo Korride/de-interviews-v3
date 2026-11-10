@@ -103,3 +103,45 @@ CREATE TABLE IF NOT EXISTS etl_batch_log (
     started_at       timestamp(0) DEFAULT now(),
     finished_at      timestamp(0)
 );
+
+-- -----------------------------------------------------------------------------
+-- 6. Reference: body-type std_id -> business group.
+--    Single source of truth for SQL marts (no CASE literals in queries).
+--    Kept in sync with constants.py (BODY_GROUP_BY_STD_ID).
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ref_body_group (
+    std_id     integer     PRIMARY KEY,
+    body_group varchar(20) NOT NULL
+);
+
+INSERT INTO ref_body_group (std_id, body_group) VALUES
+    (56, 'Тент'),
+    (4,  'Рефрижератор'),
+    (2,  'Изотерм'),
+    (15, 'Борт')
+ON CONFLICT (std_id) DO UPDATE SET body_group = EXCLUDED.body_group;
+
+-- -----------------------------------------------------------------------------
+-- 7. Reference: business parameters (as_of, thresholds, labels).
+--    Single source of truth for SQL marts (no magic numbers in queries).
+--    Keys match constants.py (PARAM_*).
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS etl_params (
+    param varchar(40) PRIMARY KEY,
+    value text        NOT NULL
+);
+
+INSERT INTO etl_params (param, value) VALUES
+    ('as_of_date',                  '2026-10-26'),
+    ('freshness_days',              '30'),
+    ('reliability_high_trips',      '30'),
+    ('reliability_high_carriers',   '5'),
+    ('reliability_medium_trips',    '10'),
+    ('reliability_level_high',      'HIGH'),
+    ('reliability_level_medium',    'MEDIUM'),
+    ('reliability_level_low',       'LOW_DATA'),
+    ('rub_min_price',               '1000'),
+    ('volume_ftl_max',              '120'),
+    ('body_group_other',            'Прочие'),
+    ('body_group_unknown',          'Не указан')
+ON CONFLICT (param) DO UPDATE SET value = EXCLUDED.value;
